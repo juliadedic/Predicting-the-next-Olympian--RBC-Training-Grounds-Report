@@ -1,0 +1,787 @@
+---
+title: "Can We Predict the Next Olympian?"
+output:
+  html_document:
+    theme: lumen
+    highlight: tango
+---
+**What is the RBC Training Grounds?**
+<br />
+The RBC Training Grounds offers many young athletes the opportunity to discover their true potential. Participants between the ages of thirteen and thirty are eligible to attend the RBC Training Grounds event which consists of a series of tests measuring speed, power, endurance and strength. Each participant competes against the benchmarks set by eleven National Sport Organizations (NSO) which are used to determine an athlete's potential for an Olympic medal.
+<br />
+
+To participate in this program, participants can attend one of many qualifiers taking place throughout Canada. At each qualifier, participants will be graded based on athletic performance and will compete against each other to attend a regional finals. The top ten athletes from each test in the preliminary round (based on z-score) will be invited to participate in the final round of testing (final test). From the results of the final test, different sports will nominate participants for funding, resources, and coaching with the goal of being able to compete on the national team.
+<br />
+
+**Data Collection Methodology**
+<br />
+The RBC training grounds data was supplied by the Canadian Sports Institute, which contains information on last years participants. The data contains results on preliminary tests which include vertical jump, 10m sprint, 30m sprint, and isometric mid-thigh pull, as well as results from the final tests being 10m sprint, 30m sprint, 40m sprint, 30-40m sprint, upper body pull, upper body push, lower body pull, triple jump, single jump, arm/leg bike, and relative six second peak power measurements. The data also contained anatomic measurements of each participant which included height, weight, wingspan and gender. The participants were given ID numbers to track their results at each stage of the event. The data used within this analysis came from the RBC training ground events in Ontario, British Columbia, Quebec, Alberta, and Atlantic Canada as a whole.
+
+**Objective / Primary Questions of Interest**
+<br />
+The overall objective of this data analysis is to predict the next Olympian using the data from prior RBC training ground participants.
+<br />
+
+The primary focuses are:
+
+1. Predicting who will be nominated based on final test results. <br />
+2. Providing insight as to which test measurements are most important for increasing the chances of nomination. <br />
+<br />
+
+```{r setup, include=FALSE, warning=FALSE, mesage=FALSE, echo=FALSE}
+# knitr::opts_chunk$set(echo = FALSE)
+suppressWarnings(library(RODBC))
+library(corrplot)
+library(tree)
+library(rpart)
+library(rpart.plot)
+library(dplyr)
+library(kableExtra)
+library(knitr)
+library(tidyr)
+library(broom)
+library("ROSE")
+library(rpart)
+library(ROCR)
+data <-read.csv("C:/Users/julia18/Desktop/Project 2 RBC/big.csv")
+attach(data)
+male_data <- data %>% filter(true_gender ==1)#274 obs
+female_data <- data %>% filter(true_gender ==2) #102 obs
+nom_male <- subset(male_data,Nominated == "1")#110
+not_nom_male <-subset(male_data,Nominated == "0")#164
+nom_female <- subset(female_data,Nominated == "1")#36
+not_nom_female <-subset(female_data,Nominated == "0")#66
+```
+**Exploratory Data Analysis**
+<br />
+This section will focus on exploring the data to see how the questions of interest can be answered. 
+<br />
+
+The analysis had been conducted with the data being partitioned into two sets: male and female participants. This was done since sport teams are separated by gender and hence, nominations for different sports will be based on team selection for each gender. Given this, there were two hundred and seventy-four and one hundred and two male and female participants, respectively, which made it to the final testing round. Of these participants, one hundred and ten and sixty-six males and females, respectively, were nominated.
+<br />
+<br />
+To begin, some important results from the exploration of preliminary data were concluded below. 
+<br />
+<br />
+The mean and standard deviations of test score measurements for both nominated and not nominated males and females are given below in **Tables 1** and **2**, followed by **3** and **4** respectively. <br />
+<br />
+<center> **Table 1. Mean and standard deviations of final test measurements for males that were nominated.**<center>
+```{r, warning=FALSE, mesage=FALSE, echo = FALSE, fig.align='center'}
+#male nom
+m1<-data.frame(round(matrix(c(mean(nom_male$TRIPLE.BROAD.JUMP.x), sd(nom_male$TRIPLE.BROAD.JUMP.x), mean(nom_male$SINGLE.BROAD.JUMP.x), sd(nom_male$SINGLE.BROAD.JUMP.x), mean(nom_male$RELATIVE.6SEC.PEAK.POWER.x), sd(nom_male$RELATIVE.6SEC.PEAK.POWER.x), mean(nom_male$UB.PULL.x), sd(nom_male$UB.PULL.x), mean(nom_male$UB.PUSH.x), sd(nom_male$UB.PUSH.x),mean(nom_male$LB.PUSH.x), sd(nom_male$LB.PUSH.x),mean(nom_male$X0.30M.x), sd(nom_male$X0.30M.x),mean(nom_male$X0.10M.x),sd(nom_male$X0.10M.x), mean(nom_male$X0.40M.x), sd(nom_male$X0.40M.x), mean(nom_male$X30.40M.x), sd(nom_male$X30.40M.x), mean(nom_male$ARM.LEG.BIKE.x), sd(nom_male$ARM.LEG.BIKE.x), mean(nom_male$HEIGHT.x), sd(nom_male$HEIGHT.x),mean(nom_male$WEIGHT.x), sd(nom_male$WEIGHT.x),mean(nom_male$WINGSPAN.x), sd(nom_male$WINGSPAN.x)), nrow=14, ncol=2,byrow=TRUE), 2))
+names=c("triple broad jump (metres)", "single broad jump (metres)", "relative 6 sec. peak power", "upper body pull", "upper body push", "lower body push", "0-30m sprint (secs)", "0-10m sprint (secs)", "0-40m sprint (secs)", "30-40m sprint (secs)","arm, leg, bike","height (cm)", "weight(kg)", "wingspan(cm)")
+names2=c("mean   ", "   standard deviation")
+rownames(m1) = names
+colnames(m1) = names2
+# m1=kable(m1)
+ # m1 %>% knitr::kable
+knitr::kable(m1, format="markdown")
+```
+<br />
+<br />
+<center> **Table 2. Mean and standard deviations of final test measurements for males that were not nominated.** <center>
+```{r, message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+#males not nom
+#male nom
+m<-data.frame(round(matrix(c(mean(not_nom_male$TRIPLE.BROAD.JUMP.x), sd(not_nom_male$TRIPLE.BROAD.JUMP.x), mean(not_nom_male$SINGLE.BROAD.JUMP.x), sd(not_nom_male$SINGLE.BROAD.JUMP.x), mean(not_nom_male$RELATIVE.6SEC.PEAK.POWER.x), sd(not_nom_male$RELATIVE.6SEC.PEAK.POWER.x), mean(not_nom_male$UB.PULL.x), sd(not_nom_male$UB.PULL.x), mean(not_nom_male$UB.PUSH.x), sd(not_nom_male$UB.PUSH.x),mean(not_nom_male$LB.PUSH.x), sd(not_nom_male$LB.PUSH.x),mean(not_nom_male$X0.30M.x), sd(not_nom_male$X0.30M.x),mean(not_nom_male$X0.10M.x),sd(not_nom_male$X0.10M.x), mean(not_nom_male$X0.40M.x), sd(not_nom_male$X0.40M.x), mean(not_nom_male$X30.40M.x), sd(not_nom_male$X30.40M.x), mean(not_nom_male$ARM.LEG.BIKE.x), sd(not_nom_male$ARM.LEG.BIKE.x), mean(not_nom_male$HEIGHT.x), sd(not_nom_male$HEIGHT.x),mean(not_nom_male$WEIGHT.x), sd(not_nom_male$WEIGHT.x),mean(not_nom_male$WINGSPAN.x), sd(not_nom_male$WINGSPAN.x)), nrow=14, ncol=2,byrow=TRUE), 2))
+names=c("triple broad jump (metres)", "single broad jump (metres)", "relative 6 sec. peak power", "upper body pull", "upper body push", "lower body push", "0-30m sprint (secs)", "0-10m sprint (secs)", "0-40m sprint (secs)", "30-40m sprint (secs)","arm, leg, bike","height (cm)", "weight(kg)", "wingspan(cm)")
+names2=c("mean   ", "   standard deviation")
+rownames(m) = names
+colnames(m) = names2
+# m=kable(m)
+# m
+knitr::kable(m, format="markdown")
+```
+<br />
+<br />
+<center> **Table 3. Mean and standard deviations of final test measurements for females that were nominated.** <center>
+```{r, message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+#females nom
+m2<-data.frame(round(matrix(c(mean(nom_female$TRIPLE.BROAD.JUMP.x), sd(nom_female$TRIPLE.BROAD.JUMP.x), mean(nom_female$SINGLE.BROAD.JUMP.x), sd(nom_female$SINGLE.BROAD.JUMP.x), mean(nom_female$RELATIVE.6SEC.PEAK.POWER.x), sd(nom_female$RELATIVE.6SEC.PEAK.POWER.x), mean(nom_female$UB.PULL.x), sd(nom_female$UB.PULL.x), mean(nom_female$UB.PUSH.x), sd(nom_female$UB.PUSH.x),mean(nom_female$LB.PUSH.x), sd(nom_female$LB.PUSH.x),mean(nom_female$X0.30M.x), sd(nom_female$X0.30M.x),mean(nom_female$X0.10M.x),sd(nom_female$X0.10M.x), mean(nom_female$X0.40M.x), sd(nom_female$X0.40M.x), mean(nom_female$X30.40M.x), sd(nom_female$X30.40M.x), mean(nom_female$ARM.LEG.BIKE.x), sd(nom_female$ARM.LEG.BIKE.x), mean(nom_female$HEIGHT.x), sd(nom_female$HEIGHT.x),mean(nom_female$WEIGHT.x), sd(nom_female$WEIGHT.x),mean(nom_female$WINGSPAN.x), sd(nom_female$WINGSPAN.x)), nrow=14, ncol=2,byrow=TRUE), 2))
+names=c("triple broad jump (metres)", "single broad jump (metres)", "relative 6 sec. peak power", "upper body pull", "upper body push", "lower body push", "0-30m sprint (secs)", "0-10m sprint (secs)", "0-40m sprint (secs)", "30-40m sprint (secs)","arm, leg, bike","height (cm)", "weight(kg)", "wingspan(cm)")
+names2=c("mean   ", "   standard deviation")
+rownames(m2) = names
+colnames(m2) = names2
+# m2=kable(m2)
+# m2
+knitr::kable(m2, format="markdown")
+```
+<br />
+<br />
+<center> **Table 4. Mean and standard deviations of final test measurements for females that were not nominated.** <center>
+```{r,message=FALSE,warning=FALSE, fig.align='center', fig.show='hold', echo=FALSE}
+#females not nom
+m3<-data.frame(round(matrix(c(mean(not_nom_female$TRIPLE.BROAD.JUMP.x), sd(not_nom_female$TRIPLE.BROAD.JUMP.x), mean(not_nom_female$SINGLE.BROAD.JUMP.x), sd(not_nom_female$SINGLE.BROAD.JUMP.x), mean(not_nom_female$RELATIVE.6SEC.PEAK.POWER.x), sd(not_nom_female$RELATIVE.6SEC.PEAK.POWER.x), mean(not_nom_female$UB.PULL.x), sd(not_nom_female$UB.PULL.x), mean(not_nom_female$UB.PUSH.x), sd(not_nom_female$UB.PUSH.x),mean(not_nom_female$LB.PUSH.x), sd(not_nom_female$LB.PUSH.x),mean(not_nom_female$X0.30M.x), sd(not_nom_female$X0.30M.x),mean(not_nom_female$X0.10M.x),sd(not_nom_female$X0.10M.x), mean(not_nom_female$X0.40M.x), sd(not_nom_female$X0.40M.x), mean(not_nom_female$X30.40M.x), sd(not_nom_female$X30.40M.x), mean(not_nom_female$ARM.LEG.BIKE.x), sd(not_nom_female$ARM.LEG.BIKE.x), mean(not_nom_female$HEIGHT.x), sd(not_nom_female$HEIGHT.x),mean(not_nom_female$WEIGHT.x), sd(not_nom_female$WEIGHT.x),mean(not_nom_female$WINGSPAN.x), sd(not_nom_female$WINGSPAN.x)), nrow=14, ncol=2,byrow=TRUE), 2))
+names=c("triple broad jump (metres)", "single broad jump (metres)", "relative 6 sec. peak power", "upper body pull", "upper body push", "lower body push", "0-30m sprint (secs)", "0-10m sprint (secs)", "0-40m sprint (secs)", "30-40m sprint (secs)","arm, leg, bike","height (cm)", "weight(kg)", "wingspan(cm)")
+names2=c("mean   ", "   standard deviation")
+rownames(m3) = names
+colnames(m3) = names2
+# knitr::kable(m2, format="markdown")
+knitr::kable(m3, format="markdown")
+
+# m3=kable(m3)
+# m3
+```
+<br />
+<br />
+By conducting t-tests on each test measurement, the lower body pull and upper body pull test measurements showed significant differences in means between the males that were nominated and those that were not nominated, as seen in **Figure 1**. Lower body push, upper body push, and height measurements showed significant differences between the females that were nominated and those that were not nominated; **Figure 2** displaying these differences. <br />
+<br />  
+<br />
+<br />
+```{r, message=FALSE,warning=FALSE, fig.align='center', fig.show='hold', echo=FALSE}
+M=matrix(c(mean(nom_male$LB.PUSH.x),mean(nom_male$UB.PULL.x),mean(not_nom_male$LB.PUSH.x), mean(not_nom_male$UB.PULL.x)), ncol=2, nrow=2)
+colours1 <- c("violetred", "deepskyblue")
+barplot(M, xlab="Nominated vs. Not Nominated Males", ylab="Test Measurement", names.arg=c("Nominated","Not Notiminated"),ylim=c(0,800), legend.text=c("Lower Body Push","Upper Body Pull"),args.legend = list(x = "topright"), border="white", density=c(1000, 1000,1000),col=colours1, beside=TRUE)
+# seeing which means are significant 
+# t.test(nom_female$TRIPLE.BROAD.JUMP.x,not_nom_female$TRIPLE.BROAD.JUMP.x, alternative ="two.sided")
+# t.test(nom_female$SINGLE.BROAD.JUMP.x,not_nom_female$SINGLE.BROAD.JUMP.x, alternative ="two.sided")
+# t.test(nom_female$UB.PUSH.x,not_nom_female$UB.PUSH.x, alternative ="two.sided")##significant
+# t.test(nom_female$RELATIVE.6SEC.PEAK.POWER.x,not_nom_female$RELATIVE.6SEC.PEAK.POWER.x, alternative ="two.sided")
+# t.test(nom_female$LB.PUSH.x,not_nom_female$LB.PUSH.x, alternative ="two.sided") ##lower body push
+# t.test(nom_female$X0.30M.x,not_nom_female$X0.30M.x, alternative ="two.sided")
+# t.test(nom_female$X0.40M.x,not_nom_female$X0.40M.x, alternative ="two.sided")
+# t.test(nom_female$HEIGHT.x,not_nom_female$HEIGHT.x, alternative ="two.sided") ##height
+# t.test(nom_male$TRIPLE.BROAD.JUMP.x,not_nom_male$TRIPLE.BROAD.JUMP.x, alternative ="two.sided")
+# t.test(nom_male$SINGLE.BROAD.JUMP.x,not_nom_male$SINGLE.BROAD.JUMP.x, alternative ="two.sided")
+# t.test(nom_male$UB.PUSH.x,not_nom_male$UB.PUSH.x, alternative ="two.sided")##ub pull
+# t.test(nom_male$RELATIVE.6SEC.PEAK.POWER.x,not_nom_male$RELATIVE.6SEC.PEAK.POWER.x, alternative ="two.sided")
+# t.test(nom_male$LB.PUSH.x,not_nom_male$LB.PUSH.x, alternative ="two.sided") ##lower body push
+# t.test(nom_male$X0.30M.x,not_nom_male$X0.30M.x, alternative ="two.sided")
+# t.test(nom_male$X0.40M.x,not_nom_male$X0.40M.x, alternative ="two.sided")
+# t.test(nom_male$HEIGHT.x,not_nom_male$HEIGHT.x, alternative ="two.sided") 
+
+
+```
+<center>**Figure 1. Test measurements that had significant differences in means between nominated and not nominated males**<center>
+<br />
+```{r,message=FALSE,warning=FALSE, fig.align='center', fig.show='hold', echo=FALSE}
+M9=matrix(c(mean(nom_female$LB.PUSH.x),mean(nom_female$UB.PUSH.x),mean(nom_female$HEIGHT.x),mean(not_nom_female$LB.PUSH.x), mean(not_nom_female$UB.PUSH.x), mean(not_nom_female$HEIGHT.x)), ncol=2, nrow=3)
+colours1 <- c("violetred", "deepskyblue", "yellow")
+barplot(M9, xlab="Nominated vs. Not Nominated Females", ylab="Test Measurement", names.arg=c("Nominated","Not Notiminated"),ylim=c(0,800), legend.text=c("Lower Body Push","Upper Body Push", "Height"),args.legend = list(x = "topright"), border="white", density=c(1000, 1000,1000),col=colours1, beside=TRUE)
+```
+<center>**Figure 2. Test measurements that had significant differences in means between nominated and not nominated  females**<center>
+<br />
+<br />
+There was also significantly high correlation found between test measurements. In particular as seen in **Figure 3**, single and triple jump had high negative correlations with 0-10m sprint, 0-30m sprint, 0-40m sprint, and 30-40m sprint. As well, each sprint test had high positive correlations. **Figure 4** shows the high positive correlations between upper body pull, lower body push and upper body push and **Figure 5** displays the high negative correlation that was also found between relative six second peak power and the sprint test measurements. Based on each particular movement, these results could imply that an individual's genetic predisposition for limb length could influence the correlation since each movement requires different fulcrum lengths to be advantageous in each of the test movements. For example, individuals with longer limbs would tend to score higher in sprint versus jump tests since their stride length would be longer allowing for more distance to be covered in less time. Conversely, their jump test could be limited from the same physiological perspective due to the overall length of their legs increasing the amount of weight that would have to be carried through the motion. This is similar to the concept that heaiver people tend to have more difficulty doing pull-ups than lighter people. <br />
+<br/>
+<br /> 
+<br />
+
+```{r, warnings=FALSE, message=FALSE, fig.align='center', echo=FALSE}
+corr_col <-subset(data[c(5:21)])
+M <- cor(corr_col[,5:10])
+corrplot(M, method = "circle")
+#displaying the strong postive cor between 0-30 and 0-40m, single and triple jump and strong negative correlation between triple and 0-30m and single and 0-30m
+```
+<center> **Figure 3. Correlation plot showing correlation between single jump, triple jump, 0-10m sprint, 0-30m spint, 0-40m sprint, and 30-40m sprint** <center>
+<br />
+<br />
+
+<br/>
+```{r,warnings=FALSE, message=FALSE, fig.align='center', echo=FALSE}
+M2 <- cor(corr_col[,13:15])
+corrplot(M2, method = "circle")
+```
+<center> **Figure 4. Correlation plot showing correlation between upper body pull, lower body push and upper body pull**<center>
+<br />
+<br />
+<br/>
+```{r,warnings=FALSE, message=FALSE, fig.align='center', echo=FALSE}
+df <- corr_col[ -c(9:11) ]
+M3 <- cor(df[,5:9])
+corrplot(M3, method = "circle")
+```
+<center> **Figure 5. Correlation plot showing correlation between relative six second peak power and the sprint test measurements**<center>
+<br />
+
+To summarize, the results from the correlation tests seem to agree with the logical assumptions to be made about the relationships between these physical tests. In particular, as sprint time increases, natutally this means the athlete is slower implying their triple jump distance would decrease as they are not able to generate enough power to move themselves forward further in the short period of time. The same holds for the relative six second peak power test. Longer short distance sprinting times means less short bursts of initial power is available to the athlete. Clearly upper body push and pull positively improve each other as well as assist lower body pushing power.<br/ >
+<br />
+<br />
+What follows is the prediction model analysis focusing on answering the questions of interest. The above preliminary analysis was taken into account and proved to be beneficial as seen in later discussion. 
+<br/>
+<br />
+To predict who will be nominated based on the final test results of participants, two different types of prediction models were compared for each gender to see what sort of test measurement criteria is needed to increase the chances of being nominated. Both models were constructed by randomly partitioning subsets of the male and female athletes RBC training grounds data as "training" and "testing" data, respectively. The training set was used to build the model and the testing set was later used to see how well the models performed for prediction.
+<br />
+
+The first model is a logistic regression model with all test measurements completed in the final testing round as predictors. In particular, the final test measurements used for prediction were triple broad jump, single broad jump, relative six second peak power, upper body pull, upper body push, lower body push, 0-30m sprint, 0-10m sprint, 0-40m sprint, arm/leg bike total, height, weight, wingspan, and age. 
+<br />
+<br />
+The logistic regression model has the following form for each gender: 
+<br/>
+
+$$ \huge\frac{\pi_{i}}{1-\pi_{i}} = e^{ \beta_{0} + \beta_{1}X_{triple jump} + \beta_{2}X_{single jump}}\\ \large +\beta_{3}X_{relative 6 sec peak power} + \beta_{4}X_{upper body pull} + \beta_{5}X_{upper body push} \\ \large + \beta_{6}X_{lower body push} + \beta_{7}X_{0-30m sprint} + \beta_{8}X_{0-10m sprint} \\ \large + \beta_{9}X_{0-40m sprint} + \beta_{10}X_{arm/leg bike} + \beta_{11}X_{height} \\ \large + \beta_{12}X_{weight} + \beta_{13}X_{wingspan} + \beta_{14}X_{age} $$
+
+<br />
+
+<center> where $\pi_{i}$ is the probability of participant $i$ being nominated. <center> 
+
+<br />
+<br />
+More specifically, using the training set of data, the following predictor estimates, in **Table 5** and **Table 6**, were obtained for each of the final tests for both the male and female participants: <br />
+<br />
+<center> **Table 5. Estimates for male participants full logistic regression model. AIC approximately 328.** <center> 
+<br />
+```{r, message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+#male
+set.seed(100)
+train_male <- male_data %>% sample_n(246) # random sample 90% of data to train
+test_male <- male_data%>% anti_join(train_male)
+log_male<-glm(Nominated~TRIPLE.BROAD.JUMP.x+SINGLE.BROAD.JUMP.x+RELATIVE.6SEC.PEAK.POWER.x+ UB.PULL.x+ UB.PUSH.x+ LB.PUSH.x+X0.30M.x+X0.10M.x+X0.40M.x+ARM.LEG.BIKE.x+HEIGHT.x+WEIGHT.x+WINGSPAN.x+AGE.x,data=train_male, family=binomial(link="logit"))
+# summary(log_male) #AIC: 329.33
+m_table <- tidy(log_male)
+knitr::kable(m_table, digits = 3,
+      col.names = c("Predictors", "Estimates", "SE", "z score", "p-value"), format="markdown")
+```
+<br />
+<br />
+<center> **Table 6. Estimates for female participants logistic regression model. AIC approximately 118.** <center> 
+```{r,message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+set.seed(100)
+train_female <- female_data %>% sample_n(91) # random sample 90% of data to train
+test_female <- female_data%>% anti_join(train_female)
+log_female<-glm(Nominated~TRIPLE.BROAD.JUMP.x+SINGLE.BROAD.JUMP.x+RELATIVE.6SEC.PEAK.POWER.x+ UB.PULL.x+ UB.PUSH.x+ LB.PUSH.x+X0.30M.x+X0.10M.x+X0.40M.x+ARM.LEG.BIKE.x+HEIGHT.x+WEIGHT.x+WINGSPAN.x+AGE.x,data=train_female, family=binomial(link="logit"))
+# summary(log_female)#AIC: 118.8
+fem_table <- tidy(log_female)
+knitr::kable(fem_table, digits = 3,
+      col.names = c("Predictors", "Estimates", "SE", "z score", "p-value"), format="markdown")
+```
+<br />
+<br /> 
+It is worth noting however, that as observed in the preliminary data analysis, the above group of predictors are highly correlated and hence, the predictors' estimates do not provide stable estimates to how each specific test measurement will influence the probability of being nominated. Therefore, this model is best to be used to predict the chances of being nominated given all test measurements. Specific influences of test measurements will be discussed. 
+<br />
+
+To test the accuracy of this model, the test data set was used to determine whether the model would predict the right conclusions about the participants in the test set; whether it was accurate in determining whether they were nominated or not. To do this, a Receiver Operating Characteristic Curve (ROC) was plotted, as seen in **Figure 6** and **Figure 7**, to see how well the models predictions were in comparison to the actually results from the test data set participants.
+<br />
+
+```{r,warning=FALSE, mesage=FALSE, echo = FALSE, fig.align='center'}
+log.predict<-predict(log_male,newdata=train_male, type='response')
+pr <- prediction(log.predict, train_male$Nominated)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, main="ROC curve")
+abline(0, 1, col="red") 
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]] #69%
+
+```
+<center> **Figure 6. The black curve indicates the ROC of the full logistic regression for male participants.** <center>
+<br />
+<br />
+```{r, warning=FALSE, mesage=FALSE, echo = FALSE, fig.align='center'}
+log.predict<-predict(log_female,newdata=train_female, type='response')
+pr <- prediction(log.predict, train_female$Nominated)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, main="ROC curve")
+abline(0, 1, col="red") 
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]] #78%
+```
+<center> **Figure 7. The black curve indicates the ROC of the full logistic regression for female participants.** <center>
+<br />
+<br/>
+With the ROC varying at different thresholds (i.e. different cut-offs needed to be classified as nominated), the plot implies how well the model is able to predict the outcome of a participant at different thresholds. From the results, the model is better than simply guessing (the red curve). By calculating the Area Under the Curve (AUC), the male model gives an accuracy of 69% meaning, the model got the classification of the participate (i.e. being nominated or not) right 69% of the time. The female model gives an accuracy of 78% based on the AUC which indicates that the prediction model works better for predicting female participant nominations compared to males nominations. However, this could be due to the fact that there is a significantly smaller population of female participants in the data set; in particular only 27% of the data is female. For both male and female prediction models, since high correlation exists between the predictors this may also be a factor as to what is lowering the prediction accuracy; the model may be slightly over fitted to the training data. <br />
+<br />
+<br />
+To see if this problem could be improved, many reduced logistic regression models were fitted and it was found that using only a specific combination of predictors for males and females proved to make the most logical sense. The reduced male model uses age, weight, arm/leg bike, 0-10m sprint, and upper body pull, whereas the reduced female model uses height, age, arm/leg bike and upper body pull. The reason for these predictors was due to their overall significance when applied individually to a logistic regression, taking into account the best predictor in each group of significantly correlated predictors. As well, the interaction terms for all of the chosen predictors for each male and female model were taken into consideration and only the significant interactions terms were included in the male and female reduced models, respectively. In particular, the interaction between arm/leg bike and upper body pull was significant for the male reduced model. The interaction between height and arm/leg bike was significant for the female reduced model. To summarize, below are the general forms for the male and female reduced models.
+<br />
+<br />
+<center> **Male reduced model:** <br />
+
+$$ \huge\frac{\pi_{i}}{1-\pi_{i}} = e^{ \beta_{0} + \beta_{1}X_{arm/leg bike} + \beta_{2}X_{0-10m sprint}}\\ \large +\beta_{3}X_{weight} + \beta_{4}X_{upper body pull} + \beta_{5}X_{age} \\ \large + \beta_{6}X_{arm/leg bike*upperbody pull} $$
+<center> where $\pi_{i}$ is the probability of the $ith$ male participant being nominated. <br />
+<br />
+<br />
+<br />
+<center> **Female reduced model:** <br />
+$$ \huge\frac{\pi_{i}}{1-\pi_{i}} = e^{ \beta_{0} + \beta_{1}X_{upperbody pull} + \beta_{2}X_{Arm/leg bike}}\\ \large +\beta_{3}X_{height} + \beta_{4}X_{age} + \beta_{5}X_{height*arm/leg bike} $$
+<center> where $\pi_{i}$ is the probability of the $ith$ female participant being nominated. <br />
+<br />
+<br />
+<br />
+
+
+The estimates for each of these models respectively in displayed in **Table 7** and  **Table 8**.<br />
+<br />
+<center> **Table 7.Reduced model with uncorrelated, individually significant predictors for males. AIC approximately 324.**<center>
+```{r, warning=FALSE, mesage=FALSE, echo = FALSE, fig.align='center'}
+# age, weight, arm/leg bike, 0-10m sprint, upper body pull
+log_male2<-glm(Nominated~ARM.LEG.BIKE.x+ X0.10M.x+ WEIGHT.x+UB.PULL.x+AGE.x +ARM.LEG.BIKE.x*UB.PULL.x,data=train_male, family=binomial(link="logit"))
+# log_male3<-glm(Nominated~ARM.LEG.BIKE.x+ X0.10M.x+ WEIGHT.x+UB.PULL.x+ AGE.x +ARM.LEG.BIKE.x*UB.PULL.x +ARM.LEG.BIKE.x*X0.10M.x+ ARM.LEG.BIKE.x*WEIGHT.x+ ARM.LEG.BIKE.x*AGE.x+X0.10M.x*WEIGHT.x +X0.10M.x*UB.PULL.x + X0.10M.x*AGE.x + WEIGHT.x*UB.PULL.x +WEIGHT.x*AGE.x + UB.PULL.x*AGE.x ,data=train_male, family=binomial(link="logit"))
+#significant interaction : ARM.LEG.BIKE.x:UB.PULL.x. AIC before significant interaction:323 and after 324. bit of a trade off for more prediction accuracy.
+# summary(log_male3)#AIC:324
+# summary(log_male2) #AIC: 323.54
+m_table2 <- tidy(log_male2)
+knitr::kable(m_table2, digits = 3,
+      col.names = c("Predictors", "Estimates", "SE", "z score", "p-value"), format="markdown")
+```
+
+<br />
+<br />
+<center> **Table 8.Reduced model with uncorrelated, individually significant predictors for females. AIC approximately 119.**<center>
+```{r, warning=FALSE, mesage=FALSE, echo = FALSE, fig.align='center'}
+log_female2<-glm(Nominated~HEIGHT.x+ARM.LEG.BIKE.x+UB.PULL.x+AGE.x + HEIGHT.x*ARM.LEG.BIKE.x,data=train_female, family=binomial(link="logit")) #AIC=119
+# log_female3<-glm(Nominated~HEIGHT.x+ARM.LEG.BIKE.x+UB.PULL.x+AGE.x+ HEIGHT.x*ARM.LEG.BIKE.x + HEIGHT.x*UB.PULL.x + HEIGHT.x*AGE.x + ARM.LEG.BIKE.x*UB.PULL.x + ARM.LEG.BIKE.x*AGE.x + UB.PULL.x*AGE.x,data=train_female, family=binomial(link="logit"))
+# summary(log_female3)
+#signficant interaction: HEIGHT.x:ARM.LEG.BIKE.x   # summary(log_female2) # before interaction term: AIC: 116.1
+#bit of a trade off for some more prediction accuracy 
+fem_table2 <- tidy(log_female2)
+knitr::kable(fem_table2, digits = 3,
+      col.names = c("Predictors", "Estimates", "SE", "z score", "p-value"), format="markdown")
+# summary(log_female2)
+```
+<br />
+<br />
+To again test the accuracy of these models, the test data sets were used to determine whether the models would predict the right conclusions about the participants in the test sets. The ROC is displayed in **Figure 8** for the male model and **Figure 9** for the female model. 
+<br />
+<br />
+```{r,warning=FALSE, mesage=FALSE, echo = FALSE, fig.align='center'}
+#male reduced roc
+log.predict<-predict(log_male2,newdata=train_male, type='response')
+pr <- prediction(log.predict, train_male$Nominated)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, main="ROC curve")
+abline(0, 1, col="red") 
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]] #64%
+```
+<center> **Figure 8. Reduced male model ROC curve. **<center>
+<br />
+```{r,warning=FALSE, mesage=FALSE, echo = FALSE, fig.align='center'}
+log.predict<-predict(log_female2,newdata=train_female, type='response')
+pr <- prediction(log.predict, train_female$Nominated)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, main="ROC curve")
+abline(0, 1, col="red") 
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]] #68%
+```
+<center> **Figure 9. Reduced female model ROC curve.** <center>
+<br />
+<br />
+Both reduced models performed worse in terms of accurate predictions compared to the full models. The male reduced model had an AUC of 64% and the female reduced model had an AUC of 68%. Even though the reduced models make more sense to use since there is less of a over fitting problem and no correlated predictors, in terms of being able to accurately predict whether an athlete will be nominated, the full models work better. Although the AIC value was slightly lower for the male reduced model implying that this model fitted the male data better, the same could not be said for the female reduced model. A Tree Classifier model method was then explored to see whether prediction accuracy could be further improved.
+<br />
+<br />
+<br />
+By using decision tree classifiers, it is possible to ignore the influences of highly correlated predictors hence, all test measurements were considered to grow the tree. For consistency purposes, the same training and set data sets were used to grow and validate the male and female trees respectively. Below **Figure 9** shows the male participant decision tree and **Figure 10** shows the female participant decision tree. 
+<br />
+<br />
+
+```{r,message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+tree_male <- rpart(Nominated~TRIPLE.BROAD.JUMP.x+SINGLE.BROAD.JUMP.x+RELATIVE.6SEC.PEAK.POWER.x+ UB.PULL.x+ UB.PUSH.x+ LB.PUSH.x+X0.30M.x+X0.10M.x+X0.40M.x+ARM.LEG.BIKE.x+HEIGHT.x+WEIGHT.x+WINGSPAN.x+AGE.x, data=train_male)
+# summary(tree_male)
+tree.predict_male<-predict(tree_male,newdata=train_male)
+# roc.curve(train_male$Nominated, tree.predict) #auc=0.924
+#summary(tree.mod)
+rpart.plot(tree_male, tweak = 2.1, varlen = 3)
+# summary(tree_male)#everything but lb push and age
+#male importance: arm/leg bike, weight, height
+```
+<center> **Figure 9. Decision tree classifer for male participants.** <center>
+<br />
+```{r,message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+tree_female <- rpart(Nominated~TRIPLE.BROAD.JUMP.x+SINGLE.BROAD.JUMP.x+RELATIVE.6SEC.PEAK.POWER.x+ UB.PULL.x+ UB.PUSH.x+ LB.PUSH.x+X0.30M.x+X0.10M.x+X0.40M.x+ARM.LEG.BIKE.x+HEIGHT.x+WEIGHT.x+WINGSPAN.x+AGE.x, data=train_female)
+# summary(tree_female)
+tree.predict_female<-predict(tree_female,newdata=train_female)
+# roc.curve(train_female$Nominated, tree.predict_female) #auc=0.907
+#summary(tree.mod)
+rpart.plot(tree_female, box.palette="Purples", tweak = 1.3, varlen = 5)
+#summary(tree_female)#only variables used "WEIGHT.x"  ,"RELATIVE.6SEC.PEAK.POWER.x" "HEIGHT.x"               "TRIPLE.BROAD.JUMP.x"        "AGE.x"                      "UB.PULL.x"  
+
+# female importance: weight, RELATIVE.6SEC.PEAK.POWER, triple jump
+
+```
+<center> **Figure 10. Decision tree classifer for female participants.** <center>
+<br />
+From **Figure 9** and **Figure 10**, the predictors the tree has chosen as significant predictors for males were arm/leg bike, height, upper body pull, 0-40m sprint, weight, upper body push, 0-10m sprint, relative six second peak power, 0-30m sprint, wingspan, triple jump, and single jump. Therefore, the tree did not find the lower body push or age measurements as important nodes to include in order to make decisions. For females, the classifier found only six measurements significant, in particular weight, relative six second peak power, height, triple jump, age, and upper body pull. Also noted from the trees are the predictors that are most significant to predicting the outcome of whether a participant will be nominated or not. The top three predictors for male participants are arm/leg bike, weight, and height whereas for females it is weight, relative six second peak power and triple jump. Most importantly, these trees provide insight as to what particular cut-offs are needed for certain tests as well as physiological measurements that a male or female athlete would need for an associated chance of being nominated.  <br />
+<br />  
+<br />
+
+To test how accurate these models are, the test data sets were used to see how well they were able to predict the participants outcomes; **Figure 11** and **Figure 12** show the ROC curves for the male and female participants trees, respectively. 
+<br />
+<br />
+```{r,message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+invisible(roc.curve(train_male$Nominated, tree.predict_male)) #auc=0.924
+```
+<center> **Figure 11. ROC curve for male participants.** <center>
+
+```{r,message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+invisible(roc.curve(train_female$Nominated, tree.predict_female)) #auc=0.907
+```
+<center> **Figure 12. ROC curve for female participants.** <center>
+<br / >
+<br />
+After calculating the AUC of the ROC, the ROC curves suggests that the decision tree classifiers are much better than the regression models. In particular, the AUC is 92.4% for males and 90.7% for females. With this being said, this suggests that the decision trees seem to be very accurate at determining whether a participant will be nominated. To further analyze these decision trees, additional validation methods were applied such as bagging and random forests, however, these methods did not increase the level of accuracy since the data set was too small to effectively use these methods. Overall, the above decision trees seem to provide a good classification method for determining whether a male or female participant will be nominated. 
+<br />
+<br />
+```{r, message=FALSE,warning=FALSE, fig.align='center', echo=FALSE}
+#female single predictor models
+# model1<-glm(Nominated~TRIPLE.BROAD.JUMP.x, data=female_data, family=binomial)#0.1368, pvalue=0.410
+# model2<-glm(Nominated~SINGLE.BROAD.JUMP.x, data=female_data, family=binomial)#0.2682, p-value=0.626
+# model3<-glm(Nominated~RELATIVE.6SEC.PEAK.POWER.x, data=female_data, family=binomial)#-0.09738, p=0.256
+# model4<-glm(Nominated~UB.PULL.x, data=female_data, family=binomial)#0.003365, p=0.0173*
+# model5<-glm(Nominated~UB.PUSH.x, data=female_data, family=binomial)#0.004362, p=0.01755*
+# model6<-glm(Nominated~LB.PUSH.x, data=female_data, family=binomial)#0.002490, p=0.0145
+# model7<-glm(Nominated~X0.30M.x, data=female_data, family=binomial)#-0.11059, p=0.82 
+# model8<-glm(Nominated~X0.10M.x, data=female_data, family=binomial)#0.1586, p=0.884
+# model9<-glm(Nominated~X0.40M.x, data=female_data, family=binomial)#-0.06257, p=0.867
+# model10<-glm(Nominated~X30.40M.x, data=female_data, family=binomial)#-0.04245, p=0.975
+# model11<-glm(Nominated~ARM.LEG.BIKE.x, data=female_data, family=binomial)#0.07874, p=0.0288*
+# model12<-glm(Nominated~HEIGHT.x, data=female_data, family=binomial)#0.05844, p=0.00861** 
+# model13<-glm(Nominated~WEIGHT.x, data=female_data, family=binomial)#0.03622  p=0.01477 * 
+# model14<-glm(Nominated~WINGSPAN.x, data=female_data, family=binomial)#0.04503  p= 0.01214 *  
+# model15<-glm(Nominated~AGE.x, data=female_data, family=binomial)#0.04976 p=0.345
+# summary(model4)
+# for females reduced model use: height, age, arm/leg bike, upper body pull
+# (cor(cbind(Nominated,TRIPLE.BROAD.JUMP.x, SINGLE.BROAD.JUMP.x, RELATIVE.6SEC.PEAK.POWER.x,UB.PULL.x,UB.PUSH.x,LB.PUSH.x,X0.30M.x,X0.10M.x,X0.40M.x,X30.40M.x,ARM.LEG.BIKE.x,
+#           HEIGHT.x, WEIGHT.x, WINGSPAN.x,AGE.x), use="complete.obs"))
+# # highly correlated: 
+# single and triple jump
+# single and double with sprint 
+# relative peak power with sprint
+# UB PULL, UB.PUSH and LB PUSH
+# with logistic:
+# rank for female: 
+# arm/leg bike
+# height
+# wingspan
+#male single predictor models
+# model1<-glm(Nominated~TRIPLE.BROAD.JUMP.x, data=male_data, family=binomial)# 0.1014   p=0.348
+# model2<-glm(Nominated~SINGLE.BROAD.JUMP.x, data=male_data, family=binomial)#0.3259  p=0.358
+# model3<-glm(Nominated~RELATIVE.6SEC.PEAK.POWER.x, data=male_data, family=binomial)#0.0113 p= 0.815
+# model4<-glm(Nominated~UB.PULL.x, data=male_data, family=binomial)# 0.0026843  p=  0.00165 **
+# model5<-glm(Nominated~UB.PUSH.x, data=male_data, family=binomial)# 0.002717   p=  0.01703 * 
+# model6<-glm(Nominated~LB.PUSH.x, data=male_data, family=binomial)#0.0017218  p= 0.005193 ** 
+# model7<-glm(Nominated~X0.30M.x, data=male_data, family=binomial)#-0.5204     p=   0.206 
+# model8<-glm(Nominated~X0.10M.x, data=male_data, family=binomial)# -2.220      p=0.0466 *
+# model9<-glm(Nominated~X0.40M.x, data=male_data, family=binomial)#-0.2761   p=   0.331
+# model10<-glm(Nominated~X30.40M.x, data=male_data, family=binomial)#-0.25316    p=   0.676
+# model11<-glm(Nominated~ARM.LEG.BIKE.x, data=male_data, family=binomial)#0.06370   p= 0.001644 **
+# model12<-glm(Nominated~HEIGHT.x, data=male_data, family=binomial)#0.01110    p=    0.305 
+# model13<-glm(Nominated~WEIGHT.x, data=male_data, family=binomial)#0.02848    p=  0.00520 ** 
+# model14<-glm(Nominated~WINGSPAN.x, data=male_data, family=binomial)#0.02727   p= 0.01205 *  
+# model15<-glm(Nominated~AGE.x, data=male_data, family=binomial)#0.01524    p=   0.674
+#for male reduced model: age, weight, arm/leg bike, 0-10m sprint
+# with logistic:
+# # rank for male: 
+# arm/leg bike
+# weight
+# wingspan
+
+# summary(model15)
+```
+<br />
+**Limitations** 
+<br />
+<br />
+The main limitation apparent in this analysis is the data set size. The data set size is relatively small for applying certain prediction model methods such as bagging and random forests. The reason being is that there is not enough data to split into more test sets since each test set created would be too small. Since more data cannot be collected year to year, a possible solution to this would be to use more data from previous years as test sets. However, this could also pose a problem since benchmarks change each year because athletic performance generally increases. Therefore the model build based on the current years data may not be accurate for prediction purposes of the data from previous years. Further model selection considerations would be needed to accurately associate all the data.
+<br />  
+<br />
+
+**Conclusion and Future Considerations** 
+<br />
+<br />
+In conclusion, the decision trees seems to provide the highest accuracy in terms of prediction for both male and female participants. It would be interesting to see how these trees would perform with previous years RBC training grounds data. The full model logistic regressions perform better in terms of prediction accuracy compared to the reduced models, however, the reduced male model seems to fit the data better (lower AIC). In terms of ordering the test measurements from most to least influence on increasing the chances of being nominated, the following top three test measurements for both genders were gathered by the logistic regression analysis. <br />
+<br />
+For males, the top three test measurements in order are: arm/leg bike, weight, and wingspan. For females, the top three test measurements in order are: arm/leg bike, height, and wingspan. These test measurements seem to be consistent with the most important predictors made by the decision trees. From a physiological stand point this is consistent to the anatomic make-up of men and women. These tests show that individuals who have measurements that are within the averages of **Table 1,2,3**, and **4** for each of the top three tests are more predisposed to have dimensions optimal for being successful as an Olympic athlete. The actual numerical increase in chances of being nominated with a certain test measurement is possibly not the most accurate with the logistic regressions and hence, further analysis needs to be done. Additionally, models with different response variables would be beneficial to consider particularly, whether accurate prediction models can be made to predict nominations for certain sports.
+<br /> 
+<br />
+
+```{r, warning=FALSE, mesage=FALSE, echo = FALSE}
+#some analysis that was not included in the final report 
+#data analysis part 1:
+# library(dplyr)
+# # finalnom <-read.csv("C:/Users/julia18/Desktop/Project 2 RBC/final and nom for only nominated.csv")
+# # attach(finalnom)
+# # mutate(finalnom, Nominated = "yes")
+# # library(readxl)
+# # final<- read_excel(sheet = 1,path = "C:/Users/julia18/Desktop/Project 2 RBC/nom-name.xlsx" )
+# # joined=left_join(final,mutate(finalnom, Nominated = "yes"))
+# # write.csv(joined, file = "C:/Users/julia18/Desktop/Project 2 RBC/finalnomcol.csv")
+# finaltonom<-read.csv("C:/Users/julia18/Desktop/Project 2 RBC/finalnomcol.csv")
+# attach(finaltonom)
+# # model = glm(Nominated ~ TRIPLE.BROAD.JUMP.1 + SINGLE.BROAD.JUMP.1 + RELATIVE.6SEC.PEAK.POWER+ UB.PULL.1+ UB.PUSH.1+ LB.PUSH.1+ X0.10M.1+ X0.30M.1+ X0.40M.1+ X30.40M.1, family=binomial)
+# #relative 6 sec peak power,UB pull, LB push significant
+# 
+# #follwing to see which of X0.10M.1+ X0.30M.1+ X0.40M.1+ X30.40M.1 are significant in seperate models for each
+# 
+# model = glm(Nominated ~ TRIPLE.BROAD.JUMP.1 + SINGLE.BROAD.JUMP.1 + RELATIVE.6SEC.PEAK.POWER+ UB.PULL.1+ UB.PUSH.1+ LB.PUSH.1+ X0.10M.1 , family=binomial) #relative 6 sec peak power, UB pull, LB pull and 0-10m sprint all significant. estimate for 0-10 is 0.25523
+# model = glm(Nominated ~ TRIPLE.BROAD.JUMP.1 + SINGLE.BROAD.JUMP.1 + RELATIVE.6SEC.PEAK.POWER+ UB.PULL.1+ UB.PUSH.1+ LB.PUSH.1+ X0.30M.1 , family=binomial) #same varaibles + 0-30m sprint siginficant with estimate of 0.36805
+# model = glm(Nominated ~ TRIPLE.BROAD.JUMP.1 + SINGLE.BROAD.JUMP.1 + RELATIVE.6SEC.PEAK.POWER+ UB.PULL.1+ UB.PUSH.1+ LB.PUSH.1+ X0.40M.1, family=binomial)
+# summary(model) #same variables significant but 0-40m sprint
+# 
+# model = glm(Nominated ~ TRIPLE.BROAD.JUMP.1 + SINGLE.BROAD.JUMP.1 + RELATIVE.6SEC.PEAK.POWER+ UB.PULL.1+ UB.PUSH.1+ LB.PUSH.1+ X30.40M.1, family=binomial) #only relative and UB pull are significant. LB and 30-40 not signficant. odds decrease with 30-40m sprint score  
+# 
+# #in order of importance for nominations regarding sprint score: 0-30,0-10,0-40, 30-40
+# 
+# #checking correlation between predictos
+# cor(cbind(Nominated,TRIPLE.BROAD.JUMP.1, SINGLE.BROAD.JUMP.1, RELATIVE.6SEC.PEAK.POWER.1, UB.PULL.1, UB.PUSH.1, LB.PUSH.1, X0.30M.1, ARM.LEG.BIKE.1),use="complete.obs")
+# # highly correlated:UB PULL, UB.PUSH and LB PUSH, single and triple jump, single and double with 0-30 m sprint and relative peak power with 0-30m sprint
+# # UB PULL, UB.PUSH and LB PUSH single predictors respectively model comparisons
+# model = glm(Nominated ~ UB.PUSH.1, family=binomial)
+# summary(model)
+# # LB push(0.64358    0.10299   6.249 4.13e-10 ***)
+# # UB PULL ( 0.74858    0.10879   6.881 5.94e-12 ***)
+# # UB.PUSH.1( 0.6289     0.1037   6.062 1.35e-09 ***
+# #all three significant but ub pull has most influence so use this in model
+# # order of significance: ub pull, lb push, ub push
+# 
+# #single and triple and 0-30m and relative peak power
+# 
+# # X0.30M.1     0.13104    0.10564    1.24  0.21484   
+# # TRIPLE.BROAD.JUMP.1  0.21334    0.09390   2.272  0.02309 * 
+# # SINGLE.BROAD.JUMP.1  0.20566    0.09445   2.177  0.02945 * 
+# # RELATIVE.6SEC.PEAK.POWER.1 -0.05365    0.09643  -0.556  0.57799   
+# #triple jump more influence over single jump in terms of odds nominated and triple jump most infleunce bwtween single triple and 0-30
+# #relative 6 sec peak decreases odds and less significant than 0-30 m so going to ignore relative 6 sec peak
+# # order: triple, single, 0-30m, relative 6 sec peak
+# 
+# model = glm(Nominated ~ TRIPLE.BROAD.JUMP + UB.PULL+ ARM.LEG.BIKE, family=binomial)
+# summary(model)
+# # (Intercept)         -0.35393    0.10066  -3.516 0.000438 ***
+# # TRIPLE.BROAD.JUMP.1  0.06227    0.10778   0.578 0.563399    
+# # UB.PULL.1            0.57788    0.12075   4.786 1.70e-06 ***
+# # ARM.LEG.BIKE.1       0.45114    0.11389   3.961 7.46e-05 ***
+# # **do tests from lecture to see how well model is**
+# 
+# #Using likelihood ratio test to determine if full model or reduced is better
+# model1=glm(Nominated~TRIPLE.BROAD.JUMP+ SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+ LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN, family=binomial)
+# G2_test=model$deviance-model1$deviance
+# pchisq(G2_test, df=10, lower.tail=FALSE)
+# summary(model1)  
+# # (Intercept)               4.295899   4.012813   1.071 0.284374    
+# # TRIPLE.BROAD.JUMP        -0.172932   0.319069  -0.542 0.587825    
+# # SINGLE.BROAD.JUMP        -0.989389   1.065144  -0.929 0.352952    
+# # RELATIVE.6SEC.PEAK.POWER -0.169965   0.063974  -2.657 0.007889 ** 
+# # UB.PULL                   0.003737   0.002006   1.863 0.062519 .  
+# # UB.PUSH                  -0.002265   0.002747  -0.825 0.409633    
+# # LB.PUSH                   0.003845   0.001167   3.296 0.000982 ***
+# # X0.30M                   -2.644953   1.966301  -1.345 0.178579    
+# # X0.10M                    0.158840   1.118505   0.142 0.887071    
+# # X0.40M                    1.259152   1.089994   1.155 0.248012    
+# # ARM.LEG.BIKE              0.032610   0.024279   1.343 0.179214    
+# # HEIGHT                    0.030429   0.025336   1.201 0.229738    
+# # WEIGHT                   -0.032419   0.016822  -1.927 0.053963 .  
+# # WINGSPAN                 -0.014215   0.021185  -0.671 0.502236 
+# anova(model, test="Chisq")
+# library(pscl)
+# pR2(model)#mcfadden r^2
+# #Ho:reduced model is true vs. Ha:true model is true
+# model3=glm(Nominated~RELATIVE.6SEC.PEAK.POWER+ LB.PUSH, family=binomial)#is model with just signficant ones better
+# G2_test=model3$deviance-model1$deviance
+# pchisq(G2_test, df=10, lower.tail=FALSE)
+# #p-value 0.01576565
+# 
+# # no cannot remove any preditors. let's check accuracy
+# nominated<-finaltonom[finaltonom$Nominated==1,]
+# notnominated<-finaltonom[finaltonom$Nominated==0,]
+# 
+# nomtrain.yes<-nominated[sample(nrow(nominated),103),]
+# nomtrain.no<-notnominated[sample(nrow(notnominated),103),]
+# nomtrain<-rbind(nomtrain.yes,nomtrain.no)
+# nomvali.yes<-nominated[sample(nrow(nominated),103),]
+# nomvali.no<-notnominated[sample(nrow(notnominated),241),]
+# nomvali<-rbind(nomvali.yes,nomvali.no)
+# 
+# # smp_size <- floor(0.80 * nrow(finaltonom))
+# # ## set the seed to make your partition reproductible
+# # set.seed(123)
+# # train_ind<- sample(seq_len(nrow(finaltonom)), size = smp_size)
+# # traindata <- finaltonom[train_ind, ]
+# # testdata <- finaltonom[-train_ind, ]
+# 
+# 
+# 
+# # traindata <-finaltonom[sample(1:nrow(finaltonom),nrow(finaltonom)*0.8),]
+# 
+#   
+# nomlog<-glm(Nominated~TRIPLE.BROAD.JUMP+SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+ LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN,data=nomtrain, family=binomial(link="logit"))  
+# summary(nomlog)
+# library(rpart)
+# nomtree<-rpart(Nominated~TRIPLE.BROAD.JUMP+SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+ LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN,data=nomtrain) 
+# 
+# # https://www.youtube.com/watch?v=OAl6eAyP-yo
+# # https://www.youtube.com/watch?v=TZwI0XgcphM
+# 
+# # misclassification error
+# # fitted.results <- predict(nomlog,newdata=nomvali,type='response')
+# # fitted.results <- ifelse(fitted.results > 0.5,1,0)
+# # classerror <- mean(fitted.results != nomvali$Nominated)
+# # print(paste('Accuracy',1-classerror))
+# 
+# library("ROSE")
+# log.predict<-predict(nomlog,newdata=nomvali, type='response')
+# log.predict <- ifelse(log.predict > 0.5,1,0)
+# pr <- prediction(log.predict, nomvali$Nominated)
+# prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+# plot(prf)
+# abline(0, 1) 
+# 
+# # https://gist.github.com/mick001/ac92e7c017aecff216fd
+# # https://www.r-bloggers.com/how-to-perform-a-logistic-regression-in-r/
+# auc <- performance(pr, measure = "auc")
+# auc <- auc@y.values[[1]]
+# auc
+# tree.predict<-predict(nomtree,newdata=nomvali)
+# roc.curve(nomvali$Nominated,log.predict)
+# roc.curve(nomvali$Nominated, tree.predict)
+# 
+# 
+# 
+# 
+# model1=glm(Nominated~SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+ LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN, family=binomial)
+# G2_test=model4$deviance-model1$deviance
+# pchisq(G2_test, df=1, lower.tail=FALSE)
+# library(ggplot2)
+# # relativepeak<- ggplot(finaltonom,
+# #        aes(y = Nominated, x = ARM.LEG.BIKE.1)) +
+# #   geom_point()
+# # 
+# # relativepeak<- ggplot(finaltonom,
+# #        aes(y = Nominated, x = UB.PULL.1)) +
+# #   geom_point()
+# 
+# 
+# 
+# 
+# 
+# 
+# #making decision trees:
+#   
+# library(party)
+# 
+# # Create the input data frame.
+# input.dat <- finaltonom
+# # Give the chart file a name.
+# png(file = "decision_tree.png")
+# # Create the tree.
+# output.tree <- ctree(Nominated ~ TRIPLE.BROAD.JUMP.1 + UB.PULL.1+ ARM.LEG.BIKE.1, data = input.dat)
+# # Plot the tree.
+# plot(output.tree)
+# # Save the file.
+# dev.off()  
+# 
+# library(tree)
+# set.seed(5)
+# train=sample(1:nrow(finaltonom),nrow(finaltonom)*0.8)
+# test=-train
+# training_data=finaltonom[train,]
+# testing_data=finaltonom[test,]
+# testing_nom=Nominated[test]
+# 
+# #building tree model using training data
+# 
+# tree_model=tree(Nominated~TRIPLE.BROAD.JUMP.1+ SINGLE.BROAD.JUMP.1+ RELATIVE.6SEC.PEAK.POWER.1 +UB.PULL.1+ UB.PUSH.1+LB.PUSH.1+X0.30M.1+ ARM.LEG.BIKE.1+HEIGHT.1+WEIGHT.1+WINGSPAN.1,training_data)
+# plot(tree_model)
+# summary(tree_model)
+# text(tree_model, pretty=0)
+# 
+# #check how the mode lis doing using the test data
+# tree_pred=predict(tree_model, testing_data, type="class")
+# mean(tree_pred != testing_nom)
+# 
+# #pruning the tree
+# #cross validation to check where to stop pruning
+# set.seed(7)
+# cv_tree=cv.tree(tree_model, FUN=prune.misclass)
+# names(cv_tree)
+# plot(cv_tree$size, cv_tree$dev, type="b")
+# #pruning at size 9
+# 
+# pruned_model=prune.misclass(tree_model, best=14)
+# plot(pruned_model)
+# text(pruned_model, pretty=0)
+# 
+# #check how it is doing
+# 
+# tree_pred1=predict(pruned_model, testing_data, type="class")
+# mean(tree_pred1 !=testing_nom)
+
+#with tree-based models, you can ignore correlation issues
+
+```
+
+```{r, warning=FALSE, mesage=FALSE, echo = FALSE}
+#model analysis part 2
+# finaltonom<-read.csv("C:/Users/julia18/Desktop/Project 2 RBC/finalnomcol.csv")
+# attach(finaltonom)
+# model1<-glm(Nominated~TRIPLE.BROAD.JUMP, data=finaltonom, family=binomial)#0.10597
+# model2<-glm(Nominated~SINGLE.BROAD.JUMP, data=finaltonom, family=binomial)#0.3453
+# model3<-glm(Nominated~RELATIVE.6SEC.PEAK.POWER, data=finaltonom, family=binomial)#-0.01433
+# model4<-glm(Nominated~UB.PULL, data=finaltonom, family=binomial)#0.0027375
+# model5<-glm(Nominated~UB.PUSH, data=finaltonom, family=binomial)#0.0032641
+# model6<-glm(Nominated~LB.PUSH, data=finaltonom, family=binomial)#0.0021076
+# model7<-glm(Nominated~X0.30M, data=finaltonom, family=binomial)#-0.1145 
+# model8<-glm(Nominated~X0.10M, data=finaltonom, family=binomial)#0.03325
+# model9<-glm(Nominated~X0.40M, data=finaltonom, family=binomial)#-0.06078
+# model10<-glm(Nominated~X30.40M, data=finaltonom, family=binomial)#-0.02905
+# model11<-glm(Nominated~ARM.LEG.BIKE, data=finaltonom, family=binomial)#0.06530
+# model12<-glm(Nominated~HEIGHT, data=finaltonom, family=binomial)#0.025470 
+# model13<-glm(Nominated~WEIGHT, data=finaltonom, family=binomial)#0.029285
+# model14<-glm(Nominated~WINGSPAN, data=finaltonom, family=binomial)#0.02939 
+# #order of importance: Single broad jump, 0-30m, triple broad jump,arm.leg.bike,0-40m,0-10m,wingspan,weight,30-40m,height, realtive 6 sec peak, ub.push,ub.pull, lb.push
+# library(tidytext)
+# library(dplyr)
+# m<-data.frame(round(matrix(c(mean(nom_total$TRIPLE.BROAD.JUMP), sd(nom_total$TRIPLE.BROAD.JUMP), mean(nom_total$SINGLE.BROAD.JUMP), sd(nom_total$SINGLE.BROAD.JUMP), mean(nom_total$RELATIVE.6SEC.PEAK.POWER), sd(nom_total$RELATIVE.6SEC.PEAK.POWER), mean(nom_total$UB.PULL), sd(nom_total$UB.PULL), mean(nom_total$UB.PUSH), sd(nom_total$UB.PUSH),mean(nom_total$LB.PUSH), sd(nom_total$LB.PUSH),mean(nom_total$X0.30M), sd(nom_total$X0.30M),mean(nom_total$X0.10M),sd(nom_total$X0.10M), mean(nom_total$X0.40M), sd(nom_total$X0.40M), mean(nom_total$X30.40M), sd(nom_total$X30.40M), mean(nom_total$ARM.LEG.BIKE), sd(nom_total$ARM.LEG.BIKE), mean(nom_total$HEIGHT), sd(nom_total$HEIGHT),mean(nom_total$WEIGHT), sd(nom_total$WEIGHT),mean(nom_total$WINGSPAN), sd(nom_total$WINGSPAN)), nrow=14, ncol=2,byrow=TRUE), 2))
+# names=c("triple broad jump", "single broad jump", "relative 6 sec. peak power", "upper body pull", "upper body push", "lower body push", "0-30m sprint", "0-10m sprint", "0-40m sprint", "30-40m sprint","arm, leg, bike","height", "weight", "wingspan")
+# names2=c("mean   ", "   standard deviation")
+# rownames(m) = names
+# colnames(m) = names2
+# m %>% knitr::kable()
+# set.seed(45)
+# nom_total <- subset(finaltonom,Nominated == "1")
+# not_nom_total <-subset(finaltonom,Nominated == "0")
+# 
+# #testing for logistic regression
+# nominated<-finaltonom[finaltonom$Nominated==1,]
+# notnominated<-finaltonom[finaltonom$Nominated==0,]
+# nomtrain.yes<-nominated[sample(nrow(nominated),103),]
+# nomtrain.no<-notnominated[sample(nrow(notnominated),103),]
+# nomtrain<-rbind(nomtrain.yes,nomtrain.no)
+# nomvali.yes<-nominated[sample(nrow(nominated),103),]
+# nomvali.no<-notnominated[sample(nrow(notnominated),241),]
+# nomvali<-rbind(nomvali.yes,nomvali.no)
+# nomlog<-glm(Nominated~TRIPLE.BROAD.JUMP+SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+ LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN,data=nomtrain, family=binomial(link="logit"))
+# summary(nomlog)
+# 
+# anova(model, test="Chisq")
+# library(pscl)
+# pR2(model)#mcfadden r^2
+# 
+# library("ROSE")
+# log.predict<-predict(nomlog,newdata=nomvali, type='response')
+# pr <- prediction(log.predict, nomvali$Nominated)
+# prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+# plot(prf)
+# abline(0, 1) 
+# auc <- performance(pr, measure = "auc")
+# auc <- auc@y.values[[1]]
+# auc #0.6424671
+# #testing the decision tree
+# library(rpart)
+# library(tree)
+# tree.mod <- tree(Nominated~TRIPLE.BROAD.JUMP+SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+ LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN, data=nomtrain)
+# summary(tree.mod)
+# tree.predict<-predict(tree.mod,newdata=nomvali)
+# tree.predict<-predict(nomtree,newdata=nomvali)
+# roc.curve(nomvali$Nominated, tree.predict)
+# summary(tree.mod)
+# plot(tree.mod)
+# text(tree.mod, pretty=0, cex=.5)
+# 
+# 
+# # library(randomForest)
+# # library(dplyr)
+# # Bagged model
+# # completeFun <- function(data, desiredCols) {
+# #   completeVec <- complete.cases(data[, desiredCols])
+# #   return(data[completeVec, ])
+# # }
+# # completeFun()
+# # nomtrain$Nominated <- as.character(nomtrain$Nominated)
+# # nomtrain$Nominated <- as.factor(nomtrain$Nominated)
+# # bag.model <- randomForest(Nominated~TRIPLE.BROAD.JUMP+SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN,data=nomtrain,mtry=13,importance=TRUE)
+# # plot(bag.model)
+# # rf.model <- randomForest(Nominated~TRIPLE.BROAD.JUMP+SINGLE.BROAD.JUMP+RELATIVE.6SEC.PEAK.POWER+ UB.PULL+ UB.PUSH+LB.PUSH+X0.30M+X0.10M+X0.40M+ARM.LEG.BIKE+HEIGHT+WEIGHT+WINGSPAN,data=nomtrain,mtry=round(sqrt(13)),importance=TRUE)
+# # rf.model
+# # plot(rf.model)
+```
+
